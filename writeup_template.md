@@ -27,6 +27,52 @@ You're reading it! Below I describe how I addressed each rubric point and where 
 ### Explain the Starter Code
 
 #### 1. Explain the functionality of what's provided in `motion_planning.py` and `planning_utils.py`
+
+
+*** Notes
+
+            #print("next_node",next_node)
+            #g = distance between child and current
+            # F is the total cost of the node.
+            # G is the distance between the current node and the start node.
+            # H is the heuristic — estimated distance from the current node to the end node.            
+            
+            G = current_cost + graph.edges[current_node, next_node]['weight']
+            H = heuristic(next_node,goal)
+            F =  G + H
+            cost = F
+
+                # 𝑔 models the cost of performing actions, irrespective of the environment,
+                # ℎ models the cost based on the environment, i.e., the distance to the goal.
+                #  𝑐𝑛𝑒𝑤=𝑐+𝑔()+ℎ().
+
+
+#BurkeA Start:
+Both py files(backyard_flyer_solution.py and motion_planning.py) has almost same structre, code flow maintained by states and 3 callback functions.But motion_planning.py has one more state (PLANNING) which is not in backyard flyer. States transtions has slight diffence,  
+
+File | States 
+--- | --- 
+backyard_flyer_solution.py | MANUAL>ARMING>TAKEOFF>WAYPOINT>LANDING>DISARMING>MANUAL
+motion_planning.py | MANUAL>ARMING>**PLANNING**>TAKEOFF>WAYPOINT>LANDING>DISARMING>MANUAL
+
+PLANNING state take responsibiliy of calculate_box function in backyard flyer. And local_position_callback function now has clearer responsibility.
+
+###particularly in the plan_path() method and functions provided in planning_utils.py and describe what's going on there
+
+plan_path:
+
+Swithces to state PLANNING which will trigger to drone take off. Drone will wait on WAYPOINT state until function complete. Loads obstacle map. In turn, create our grid with obstacles. Using A* with eucledian heuristic function,  find a way from start to goal only using only 4 directions(LEFT,RIGHT,TOP,DOWN). Path will be pruned and finally found path will be converted to waypoint array which will be added to waypoint list use in WAYPOINT state. 
+
+
+create_grid > Creates a 2D Grid with obstacles from supplied data. obstacles are creation rule is, if there is a obstacle and drone altitude is lower than this obstacle point add safety distance to four directions of obstacle, mark it is occupied.
+valid_actions> List possible action within x,y plane to direct neighbours
+a_star > A* algorithm 
+heuristic function> Euclidean distance
+
+#BurkeA End:
+
+
+
 These scripts contain a basic planning implementation that includes...
 
 And here's a lovely image of my results (ok this image has nothing to do with it, but it's a nice example of how to include images in your writeup!)
