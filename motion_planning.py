@@ -16,6 +16,8 @@ from moves import DiagonalMove,StandartMove
 from random_location_on_grid import RandomLocationOnGrid
 from bootstrap import BootStrap
 
+from grids import StandartGrid
+
 class States(Enum):
     MANUAL = auto()
     ARMING = auto()
@@ -82,6 +84,7 @@ class MotionPlanning(Drone):
                         self.landing_transition()
 
     def velocity_callback(self):
+        self.local_velocity
         if self.flight_state == States.LANDING:
             if self.global_position[2] - self.global_home[2] < 0.1:
                 if abs(self.local_position[2]) < 0.01:
@@ -179,26 +182,30 @@ class MotionPlanning(Drone):
         data = np.loadtxt('colliders.csv', delimiter=',', dtype='Float64', skiprows=2)
         
         # Define a grid for a particular altitude and safety margin around obstacles
-        grid, north_offset, east_offset,(north_min,north_max,east_min,east_max) = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
-        print("North offset = {0}, east offset = {1}".format(north_offset, east_offset))
+        #grid, north_offset, east_offset,(north_min,north_max,east_min,east_max) = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
+        standart_grid = StandartGrid()
+        standart_grid.create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
+
+        print("North offset = {0}, east offset = {1}".format(standart_grid.north_offset, standart_grid.east_offset))
 
         # Define starting point on the grid (this is just grid center)
-        grid_start = (-north_offset, -east_offset)
+        grid_start = (-standart_grid.north_offset, -standart_grid.east_offset)
         # DONE : TODO: convert start position to current position rather than map center - DONE
-        grid_start = (int(current_local_pos_ned[0] - north_offset),int(current_local_pos_ned[1] - east_offset))
+        grid_start = (int(current_local_pos_ned[0] - standart_grid.north_offset), int(current_local_pos_ned[1] - standart_grid.east_offset))
 
         # Set goal as some arbitrary position on the grid
-        grid_goal = (-north_offset + 10, -east_offset + 10)
+        grid_goal = (-standart_grid.north_offset + 10, -standart_grid.east_offset + 10)
         # DONE : TODO: adapt to set goal as latitude / longitude position and convert
-        r = RandomLocationOnGrid(self.global_home)
-        grid_goal = r.get_random_goal(north_min, north_max, east_min, east_max,north_offset,east_offset, grid)
+        # r = RandomLocationOnGrid(self.global_home)
+        # grid_goal = r.get_random_goal(north_min, north_max, east_min, east_max,north_offset,east_offset, grid)
+        grid_goal = standart_grid.get_random_goal(self.global_home)
 
         # Run A* to find a path from start to goal
         # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
         # or move to a different search space such as a graph (not done here)
         print('Local Start and Goal: ', grid_start, grid_goal)
 
-        a_star = A_Star_Grid(grid,self.boot_strap.create("MOVE_ABILITY")(grid))
+        a_star = A_Star_Grid(standart_grid.grid, self.boot_strap.create("MOVE_ABILITY")(standart_grid.grid))
 
         path, _ = a_star.run(heuristic, grid_start, grid_goal)
         # path, _ = a_star(grid, heuristic, grid_start, grid_goal)
@@ -208,11 +215,11 @@ class MotionPlanning(Drone):
         #Show Path
         # TODO: prune path to minimize number of waypoints
         # TODO (if you're feeling ambitious): Try a different approach altogether!
-        prune = boot_strap.create("PRUNING_ALGORITHM")(grid)
+        prune = boot_strap.create("PRUNING_ALGORITHM")(standart_grid.grid)
         path = prune.run(path)
 
         # Convert path to waypoints
-        waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in path]
+        waypoints = [[p[0] + standart_grid.north_offset, p[1] + standart_grid.east_offset, TARGET_ALTITUDE, 0] for p in path]
         # Set self.waypoints
         self.waypoints = waypoints
         # TODO: send waypoints to sim (this is just for visualization of waypoints)
