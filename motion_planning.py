@@ -16,7 +16,7 @@ from moves import DiagonalMove,StandartMove
 from random_location_on_grid import RandomLocationOnGrid
 from bootstrap import BootStrap
 
-from grids import StandartGrid
+from grids import StandartGrid,MedialAxis
 
 class States(Enum):
     MANUAL = auto()
@@ -71,12 +71,19 @@ class MotionPlanning(Drone):
         self.register_callback(MsgID.LOCAL_VELOCITY, self.velocity_callback)
         self.register_callback(MsgID.STATE, self.state_callback)
 
+        self.CUSTOM_GOAL_LON = 0.0
+        self.CUSTOM_GOAL_LAN = 0.0
+
+
+    def calculate_deadband(self):
+        return (1.2 * np.linalg.norm(self.local_velocity) + 1.0)
+
     def local_position_callback(self):
         if self.flight_state == States.TAKEOFF:
             if -1.0 * self.local_position[2] > 0.95 * self.target_position[2]:
                 self.waypoint_transition()
         elif self.flight_state == States.WAYPOINT:
-            if np.linalg.norm(self.target_position[0:2] - self.local_position[0:2]) < 1.0:
+            if np.linalg.norm(self.target_position[0:2] - self.local_position[0:2]) < self.calculate_deadband():#1.0:
                 if len(self.waypoints) > 0:
                     self.waypoint_transition()
                 else:
@@ -84,7 +91,7 @@ class MotionPlanning(Drone):
                         self.landing_transition()
 
     def velocity_callback(self):
-        self.local_velocity
+
         if self.flight_state == States.LANDING:
             if self.global_position[2] - self.global_home[2] < 0.1:
                 if abs(self.local_position[2]) < 0.01:
@@ -167,15 +174,12 @@ class MotionPlanning(Drone):
         self.set_home_position(lon0,lat0,0)
         
         # DONE:  TODO: retrieve current global position
-
         geodetic_current_coordinates = [self._longitude,self._latitude,self._altitude]
-        print("geodetic_current_coordinates:",geodetic_current_coordinates)
         geodetic_home_coordinates = self.global_home
-        print("self.global_home:",self.global_home)
+
         # DONE: - TODO: convert to current local position using global_to_local()
         current_local_pos_ned = global_to_local(geodetic_current_coordinates,geodetic_home_coordinates)
         print("current_local_pos_ned:",current_local_pos_ned)
-        
         print('global home {0}, position {1}, local position {2}'.format(self.global_home, self.global_position,
                                                                          self.local_position))
         # Read in obstacle map
@@ -183,29 +187,42 @@ class MotionPlanning(Drone):
         
         # Define a grid for a particular altitude and safety margin around obstacles
         #grid, north_offset, east_offset,(north_min,north_max,east_min,east_max) = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
-        standart_grid = StandartGrid()
+
+        standart_grid = boot_strap.create("GRID")()
+        print("Grid created.",standart_grid)
         standart_grid.create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
 
         print("North offset = {0}, east offset = {1}".format(standart_grid.north_offset, standart_grid.east_offset))
 
         # Define starting point on the grid (this is just grid center)
-        grid_start = (-standart_grid.north_offset, -standart_grid.east_offset)
+        # grid_start = (-standart_grid.north_offset, -standart_grid.east_offset)
         # DONE : TODO: convert start position to current position rather than map center - DONE
         grid_start = (int(current_local_pos_ned[0] - standart_grid.north_offset), int(current_local_pos_ned[1] - standart_grid.east_offset))
 
         # Set goal as some arbitrary position on the grid
-        grid_goal = (-standart_grid.north_offset + 10, -standart_grid.east_offset + 10)
+        # grid_goal = (-standart_grid.north_offset + 10, -standart_grid.east_offset + 10)
         # DONE : TODO: adapt to set goal as latitude / longitude position and convert
-        # r = RandomLocationOnGrid(self.global_home)
-        # grid_goal = r.get_random_goal(north_min, north_max, east_min, east_max,north_offset,east_offset, grid)
-        grid_goal = standart_grid.get_random_goal(self.global_home)
+        if self.CUSTOM_GOAL_LAN == 0 and self.CUSTOM_GOAL_LON == 0:
+            grid_goal = standart_grid.get_random_goal(self.global_home)
+        else:
+            goal_local_pos = global_to_local([self.CUSTOM_GOAL_LON, self.CUSTOM_GOAL_LAN, self.global_home[2]], self.global_home)
+            grid_goal = (int(goal_local_pos[0] - standart_grid.north_offset), int(goal_local_pos[1] - standart_grid.east_offset))
+            if standart_grid.grid[grid_goal[0]][grid_goal[1]] > 0:  # a collision
+                print("\nERROR: specified goal is a collision, aborting planning!")
+                print("Resetting goal to start location\n")
+                grid_goal = grid_start
 
+        grid_start, grid_goal = standart_grid.relocate_start_goal_if_necessary(grid_start, grid_goal)
         # Run A* to find a path from start to goal
         # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
         # or move to a different search space such as a graph (not done here)
-        print('Local Start and Goal: ', grid_start, grid_goal)
 
-        a_star = A_Star_Grid(standart_grid.grid, self.boot_strap.create("MOVE_ABILITY")(standart_grid.grid))
+
+        print('Local Start and Goal: ', grid_start, grid_goal)
+        move_ability = self.boot_strap.create("MOVE_ABILITY")(standart_grid.edges)
+        a_star = boot_strap.create("SEARCH_ALGORITHM")(standart_grid.edges, move_ability)
+
+        # a_star = A_Star_Grid(standart_grid.grid, self.boot_strap.create("MOVE_ABILITY")(standart_grid.grid))
 
         path, _ = a_star.run(heuristic, grid_start, grid_goal)
         # path, _ = a_star(grid, heuristic, grid_start, grid_goal)
@@ -241,7 +258,9 @@ class MotionPlanning(Drone):
 if __name__ == "__main__":
     boot_strap = BootStrap()
     boot_strap.add("MOVE_ABILITY", "moves.DiagonalMove") #DiagonalMove,StandartMove
-    boot_strap.add("PRUNING_ALGORITHM", "pruning.Bresenham")  # Bresenham,Collinearity
+    boot_strap.add("PRUNING_ALGORITHM", "pruning.Collinearity")  # Bresenham,Collinearity
+    boot_strap.add("SEARCH_ALGORITHM", "a_star.A_Star_Grid")  # A_Star_Graph,A_Star_Grid
+    boot_strap.add("GRID", "grids.StandartGrid")  # StandartGrid,MedialAxis,VoronoiGrid
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=5760, help='Port number')
@@ -250,6 +269,8 @@ if __name__ == "__main__":
 
     conn = MavlinkConnection('tcp:{0}:{1}'.format(args.host, args.port), timeout=60)
     drone = MotionPlanning(conn,boot_strap)
+    drone.CUSTOM_GOAL_LON = 0.0
+    drone.CUSTOM_GOAL_LAT = 0.0
     time.sleep(1)
 
     drone.start()

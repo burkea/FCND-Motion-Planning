@@ -39,10 +39,21 @@ class A_Star_Graph(SearchAlgorithm):
                 for next_node in self.graph[current_node]:
                     # print("next_node:", next_node)
                     # print("edge:", self.graph.edges[current_node, next_node])
+
+                    # cost = self.graph.edges[current_node, next_node]['weight']
+                    # # print("cost:", cost)
+                    # branch_cost = current_cost + cost
+                    # queue_cost = branch_cost + h(next_node, goal)
+
+                    # F is the total cost of the node.
+                    # G is the distance between the current node and the start node.
+                    # H is the heuristic — estimated distance from the current node to the end node.
                     cost = self.graph.edges[current_node, next_node]['weight']
-                    # print("cost:", cost)
-                    branch_cost = current_cost + cost
-                    queue_cost = branch_cost + h(next_node, goal)
+                    G = current_cost + cost
+                    H = h(next_node, goal)
+                    F = G + H
+                    queue_cost = F
+
                     '''
                     for action in valid_actions(grid, current_node):
                         # get the tuple representation
@@ -53,7 +64,7 @@ class A_Star_Graph(SearchAlgorithm):
                     '''
                     if next_node not in visited:
                         visited.add(next_node)
-                        branch[next_node] = (branch_cost, current_node, next_node)
+                        branch[next_node] = (G, current_node, next_node)
                         queue.put((queue_cost, next_node))
         if found:
             # retrace steps
@@ -108,6 +119,7 @@ class A_Star_Grid(SearchAlgorithm):
                     next_node = (current_node[0] + da[0], current_node[1] + da[1])
                     branch_cost = current_cost + action.cost
                     queue_cost = branch_cost + h(next_node, goal)
+
 
                     if next_node not in visited:
                         visited.add(next_node)

@@ -61,7 +61,7 @@ class Bresenham(Prune):
             p1 = pruned_path[i]
             p2 = pruned_path[i + 1]
             p3 = pruned_path[i + 2]
-            cells = list(bresenham(p1[0], p1[1], p3[0], p3[1]))
+            cells = list(bresenham(int(p1[0]), int(p1[1]), int(p3[0]), int(p3[1])))
             hit = False
             # Collision check
             for c in cells:
